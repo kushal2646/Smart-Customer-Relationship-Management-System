@@ -1,34 +1,10 @@
-import express from 'express';
-import { body } from 'express-validator';
-import {
-  getTasks,
-  getTaskById,
-  createTask,
-  updateTask,
-  deleteTask,
-} from '../controllers/taskController.js';
-import { protect } from '../middleware/auth.js';
-import validate from '../middleware/validate.js';
+const express = require('express');
+const { getTasks, createTask, updateTask, deleteTask } = require('../controllers/taskController');
+const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-router.use(protect);
+router.route('/').get(protect, getTasks).post(protect, createTask);
+router.route('/:id').put(protect, updateTask).delete(protect, deleteTask);
 
-router.get('/', getTasks);
-router.get('/:id', getTaskById);
-
-router.post(
-  '/',
-  [
-    body('title').trim().notEmpty(),
-    body('deadline').isISO8601(),
-    body('assignedUser').notEmpty(),
-  ],
-  validate,
-  createTask
-);
-
-router.put('/:id', updateTask);
-router.delete('/:id', deleteTask);
-
-export default router;
+module.exports = router;

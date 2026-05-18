@@ -1,138 +1,72 @@
-import Task from '../models/Task.js';
-import { successResponse, errorResponse } from '../utils/apiResponse.js';
-import logActivity from '../utils/activityLogger.js';
+const Task = require('../models/Task');
 
-const buildQuery = (req) => {
-  const { search, status, priority, assignedUser } = req.query;
-  const query = {};
-
-  if (search) {
-    query.$or = [
-      { title: { $regex: search, $options: 'i' } },
-      { description: { $regex: search, $options: 'i' } },
-    ];
-  }
-  if (status) query.status = status;
-  if (priority) query.priority = priority;
-  if (assignedUser) query.assignedUser = assignedUser;
-
-  if (req.user.role === 'employee') {
-    query.assignedUser = req.user._id;
-  }
-
-  return query;
-};
-
-export const getTasks = async (req, res, next) => {
+const getTasks = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    const query = buildQuery(req);
-
-    const [tasks, total] = await Promise.all([
-      Task.find(query)
-        .populate('assignedUser', 'name email')
-        .populate('relatedCustomer', 'name')
-        .populate('relatedLead', 'title')
-        .populate('createdBy', 'name')
-        .sort({ deadline: 1 })
-        .skip(skip)
-        .limit(limit),
-      Task.countDocuments(query),
-    ]);
-
-    successResponse(res, 200, 'Tasks fetched', {
-      tasks,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    const tasks = await Task.find({})
+      .populate('assignedTo', 'name email')
+      .populate('createdBy', 'name email');
+    res.json(tasks);
   } catch (error) {
-    next(error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-export const getTaskById = async (req, res, next) => {
-  try {
-    const task = await Task.findById(req.params.id)
-      .populate('assignedUser', 'name email')
-      .populate('relatedCustomer', 'name')
-      .populate('relatedLead', 'title');
+const createTask = async (req, res) => {
+  const { title, description, status, dueDate, assignedTo } = req.body;
 
-    if (!task) return errorResponse(res, 404, 'Task not found');
-    successResponse(res, 200, 'Task fetched', task);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const createTask = async (req, res, next) => {
   try {
-    const task = await Task.create({
-      ...req.body,
+    const task = new Task({
+      title,
+      description,
+      status,
+      dueDate,
+      assignedTo: assignedTo || req.user._id,
       createdBy: req.user._id,
     });
 
-    const populated = await Task.findById(task._id).populate('assignedUser', 'name email');
-
-    await logActivity({
-      user: req.user._id,
-      action: 'create',
-      entityType: 'task',
-      entityId: task._id,
-      description: `Task "${task.title}" created`,
-    });
-
-    successResponse(res, 201, 'Task created', populated);
+    const createdTask = await task.save();
+    res.status(201).json(createdTask);
   } catch (error) {
-    next(error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-export const updateTask = async (req, res, next) => {
-  try {
-    let task = await Task.findById(req.params.id);
-    if (!task) return errorResponse(res, 404, 'Task not found');
+const updateTask = async (req, res) => {
+  const { title, description, status, dueDate, assignedTo } = req.body;
 
-    task = await Task.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    }).populate('assignedUser', 'name email');
-
-    await logActivity({
-      user: req.user._id,
-      action: 'update',
-      entityType: 'task',
-      entityId: task._id,
-      description: `Task "${task.title}" updated to ${task.status}`,
-    });
-
-    successResponse(res, 200, 'Task updated', task);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const deleteTask = async (req, res, next) => {
   try {
     const task = await Task.findById(req.params.id);
-    if (!task) return errorResponse(res, 404, 'Task not found');
 
-    if (task.status !== 'completed') {
-      return errorResponse(res, 400, 'Only completed tasks can be deleted');
+    if (task) {
+      task.title = title || task.title;
+      task.description = description || task.description;
+      task.status = status || task.status;
+      task.dueDate = dueDate || task.dueDate;
+      task.assignedTo = assignedTo || task.assignedTo;
+
+      const updatedTask = await task.save();
+      res.json(updatedTask);
+    } else {
+      res.status(404).json({ message: 'Task not found' });
     }
-
-    await Task.findByIdAndDelete(req.params.id);
-
-    await logActivity({
-      user: req.user._id,
-      action: 'delete',
-      entityType: 'task',
-      entityId: task._id,
-      description: `Task "${task.title}" deleted`,
-    });
-
-    successResponse(res, 200, 'Task deleted successfully');
   } catch (error) {
-    next(error);
+    res.status(500).json({ message: error.message });
   }
 };
+
+const deleteTask = async (req, res) => {
+  try {
+    const task = await Task.findById(req.params.id);
+
+    if (task) {
+      await task.deleteOne();
+      res.json({ message: 'Task removed' });
+    } else {
+      res.status(404).json({ message: 'Task not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getTasks, createTask, updateTask, deleteTask };

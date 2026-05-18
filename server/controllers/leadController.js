@@ -1,131 +1,71 @@
-import Lead from '../models/Lead.js';
-import { successResponse, errorResponse } from '../utils/apiResponse.js';
-import logActivity from '../utils/activityLogger.js';
+const Lead = require('../models/Lead');
 
-const buildQuery = (req) => {
-  const { search, status, assignedTo } = req.query;
-  const query = {};
-
-  if (search) {
-    query.$or = [
-      { title: { $regex: search, $options: 'i' } },
-      { customerName: { $regex: search, $options: 'i' } },
-      { company: { $regex: search, $options: 'i' } },
-    ];
-  }
-  if (status) query.status = status;
-  if (assignedTo) query.assignedTo = assignedTo;
-
-  if (req.user.role === 'employee') {
-    query.assignedTo = req.user._id;
-  }
-
-  return query;
-};
-
-export const getLeads = async (req, res, next) => {
+const getLeads = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    const query = buildQuery(req);
-
-    const [leads, total] = await Promise.all([
-      Lead.find(query)
-        .populate('assignedTo', 'name email')
-        .populate('createdBy', 'name')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      Lead.countDocuments(query),
-    ]);
-
-    successResponse(res, 200, 'Leads fetched', {
-      leads,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-    });
+    const leads = await Lead.find({}).populate('assignedTo', 'name email');
+    res.json(leads);
   } catch (error) {
-    next(error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-export const getLeadById = async (req, res, next) => {
-  try {
-    const lead = await Lead.findById(req.params.id)
-      .populate('assignedTo', 'name email')
-      .populate('createdBy', 'name');
+const createLead = async (req, res) => {
+  const { name, email, phone, source, status, assignedTo } = req.body;
 
-    if (!lead) return errorResponse(res, 404, 'Lead not found');
-    successResponse(res, 200, 'Lead fetched', lead);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const createLead = async (req, res, next) => {
   try {
-    const lead = await Lead.create({
-      ...req.body,
-      createdBy: req.user._id,
+    const lead = new Lead({
+      name,
+      email,
+      phone,
+      source,
+      status,
+      assignedTo: assignedTo || req.user._id,
     });
 
-    const populated = await Lead.findById(lead._id).populate('assignedTo', 'name email');
-
-    await logActivity({
-      user: req.user._id,
-      action: 'create',
-      entityType: 'lead',
-      entityId: lead._id,
-      description: `Lead "${lead.title}" created`,
-    });
-
-    successResponse(res, 201, 'Lead created', populated);
+    const createdLead = await lead.save();
+    res.status(201).json(createdLead);
   } catch (error) {
-    next(error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-export const updateLead = async (req, res, next) => {
-  try {
-    let lead = await Lead.findById(req.params.id);
-    if (!lead) return errorResponse(res, 404, 'Lead not found');
+const updateLead = async (req, res) => {
+  const { name, email, phone, source, status, assignedTo } = req.body;
 
-    lead = await Lead.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    }).populate('assignedTo', 'name email');
-
-    await logActivity({
-      user: req.user._id,
-      action: 'update',
-      entityType: 'lead',
-      entityId: lead._id,
-      description: `Lead "${lead.title}" updated to ${lead.status}`,
-    });
-
-    successResponse(res, 200, 'Lead updated', lead);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const deleteLead = async (req, res, next) => {
   try {
     const lead = await Lead.findById(req.params.id);
-    if (!lead) return errorResponse(res, 404, 'Lead not found');
 
-    await Lead.findByIdAndDelete(req.params.id);
+    if (lead) {
+      lead.name = name || lead.name;
+      lead.email = email || lead.email;
+      lead.phone = phone || lead.phone;
+      lead.source = source || lead.source;
+      lead.status = status || lead.status;
+      lead.assignedTo = assignedTo || lead.assignedTo;
 
-    await logActivity({
-      user: req.user._id,
-      action: 'delete',
-      entityType: 'lead',
-      entityId: lead._id,
-      description: `Lead "${lead.title}" deleted`,
-    });
-
-    successResponse(res, 200, 'Lead deleted successfully');
+      const updatedLead = await lead.save();
+      res.json(updatedLead);
+    } else {
+      res.status(404).json({ message: 'Lead not found' });
+    }
   } catch (error) {
-    next(error);
+    res.status(500).json({ message: error.message });
   }
 };
+
+const deleteLead = async (req, res) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+
+    if (lead) {
+      await lead.deleteOne();
+      res.json({ message: 'Lead removed' });
+    } else {
+      res.status(404).json({ message: 'Lead not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getLeads, createLead, updateLead, deleteLead };

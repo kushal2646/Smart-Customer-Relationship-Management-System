@@ -1,65 +1,59 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import ProtectedRoute from './routes/ProtectedRoute';
-import DashboardLayout from './layouts/DashboardLayout';
-import LoadingSpinner from './components/ui/LoadingSpinner';
-import Login from './pages/auth/Login';
+import React, { useContext } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { AuthContext, AuthProvider } from './context/AuthContext';
+import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import Customers from './pages/Customers';
 import Leads from './pages/Leads';
 import Tasks from './pages/Tasks';
 import Employees from './pages/Employees';
-import Profile from './pages/Profile';
-import ActivitiesPage from './pages/Activities';
 
-const App = () => {
-  const { user, loading } = useAuth();
+const ProtectedRoute = ({ children, adminOnly }) => {
+  const { user } = useContext(AuthContext);
+  if (!user) return <Navigate to="/login" />;
+  if (adminOnly && user.role !== 'Admin') return <Navigate to="/" />;
+  return children;
+};
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
+const AppRoutes = () => {
+  const { user } = useContext(AuthContext);
+  
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="customers" element={<Customers />} />
-        <Route path="leads" element={<Leads />} />
-        <Route path="tasks" element={<Tasks />} />
-        <Route
-          path="employees"
+    <Router>
+      <Toaster position="top-right" />
+      <Routes>
+        <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+        <Route path="/register" element={user ? <Navigate to="/" /> : <Register />} />
+        <Route 
+          path="/" 
           element={
-            <ProtectedRoute roles={['admin', 'sales_manager']}>
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Dashboard />} />
+          <Route path="customers" element={<Customers />} />
+          <Route path="leads" element={<Leads />} />
+          <Route path="tasks" element={<Tasks />} />
+          <Route path="employees" element={
+            <ProtectedRoute adminOnly>
               <Employees />
             </ProtectedRoute>
-          }
-        />
-        <Route
-          path="activities"
-          element={
-            <ProtectedRoute roles={['admin', 'sales_manager']}>
-              <ActivitiesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="profile" element={<Profile />} />
-      </Route>
-      <Route path="*" element={<Navigate to={user ? '/dashboard' : '/login'} replace />} />
-    </Routes>
+          } />
+        </Route>
+      </Routes>
+    </Router>
   );
 };
+
+const App = () => (
+  <AuthProvider>
+    <AppRoutes />
+  </AuthProvider>
+);
 
 export default App;

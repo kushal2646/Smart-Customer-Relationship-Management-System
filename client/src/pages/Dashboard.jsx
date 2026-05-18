@@ -1,126 +1,152 @@
-import { useEffect, useState } from 'react';
-import { Users, Target, CheckCircle, ListTodo } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from 'recharts';
-import StatCard from '../components/ui/StatCard';
-import LoadingSpinner from '../components/ui/LoadingSpinner';
-import { getDashboardStats } from '../services/dashboardService';
-import { getErrorMessage, formatStatus } from '../utils/helpers';
-import { formatDistanceToNow } from 'date-fns';
-import toast from 'react-hot-toast';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
+import { Users, Briefcase, CheckSquare, Activity, ArrowUpRight, TrendingUp } from 'lucide-react';
 
 const Dashboard = () => {
-  const [data, setData] = useState(null);
+  const [stats, setStats] = useState({
+    customers: 0,
+    leads: 0,
+    tasks: 0
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchStats = async () => {
       try {
-        const res = await getDashboardStats();
-        setData(res.data.data);
+        const [customersRes, leadsRes, tasksRes] = await Promise.all([
+          api.get('/customers'),
+          api.get('/leads'),
+          api.get('/tasks')
+        ]);
+        
+        setStats({
+          customers: customersRes.data.length,
+          leads: leadsRes.data.length,
+          tasks: tasksRes.data.filter(t => t.status !== 'Completed').length
+        });
       } catch (error) {
-        toast.error(getErrorMessage(error));
+        console.error('Error fetching stats', error);
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
+
+    fetchStats();
   }, []);
+
+  const cards = [
+    { 
+      title: 'Total Customers', 
+      value: stats.customers, 
+      icon: Users, 
+      bg: 'bg-gradient-to-br from-blue-500 to-blue-700',
+      shadow: 'shadow-blue-500/30'
+    },
+    { 
+      title: 'Active Leads', 
+      value: stats.leads, 
+      icon: Briefcase, 
+      bg: 'bg-gradient-to-br from-indigo-500 to-purple-600',
+      shadow: 'shadow-indigo-500/30'
+    },
+    { 
+      title: 'Pending Tasks', 
+      value: stats.tasks, 
+      icon: CheckSquare, 
+      bg: 'bg-gradient-to-br from-orange-400 to-red-500',
+      shadow: 'shadow-red-500/30'
+    },
+  ];
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <LoadingSpinner size="lg" />
+      <div className="flex justify-center items-center h-[80vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
-  const { stats, monthlySales, recentActivities } = data || {};
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-gray-500">Overview of your CRM performance</p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="Total Customers" value={stats?.totalCustomers || 0} icon={Users} color="blue" />
-        <StatCard title="Total Leads" value={stats?.totalLeads || 0} icon={Target} color="purple" />
-        <StatCard title="Closed Deals" value={stats?.closedDeals || 0} icon={CheckCircle} color="green" />
-        <StatCard title="Pending Tasks" value={stats?.pendingTasks || 0} icon={ListTodo} color="orange" />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="card">
-          <h3 className="mb-4 text-lg font-semibold">Monthly Revenue</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlySales || []}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--tw-bg-opacity)',
-                  borderRadius: '8px',
-                  border: 'none',
-                }}
-                formatter={(value) => [`$${value.toLocaleString()}`, 'Revenue']}
-              />
-              <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard Overview</h1>
+          <p className="text-gray-500 mt-1">Welcome back! Here is what's happening today.</p>
         </div>
-
-        <div className="card">
-          <h3 className="mb-4 text-lg font-semibold">Deals Closed</h3>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={monthlySales || []}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Line type="monotone" dataKey="deals" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <button className="flex items-center bg-white border border-gray-200 px-4 py-2 rounded-lg text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors">
+          <TrendingUp className="w-4 h-4 mr-2 text-gray-400" />
+          Generate Report
+        </button>
       </div>
-
-      <div className="card">
-        <h3 className="mb-4 text-lg font-semibold">Recent Activities</h3>
-        {recentActivities?.length === 0 ? (
-          <p className="text-sm text-gray-500">No recent activities</p>
-        ) : (
-          <div className="space-y-4">
-            {recentActivities?.map((activity) => (
-              <div key={activity._id} className="flex items-start gap-3 border-b border-gray-100 pb-4 last:border-0 dark:border-gray-800">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
-                  {activity.user?.name?.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm">{activity.description}</p>
-                  <p className="mt-0.5 text-xs text-gray-400">
-                    {activity.user?.name} · {formatStatus(activity.entityType)} ·{' '}
-                    {formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}
-                  </p>
-                </div>
+      
+      {/* Metrics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {cards.map((card, idx) => (
+          <div key={idx} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group relative overflow-hidden">
+            <div className={`absolute top-0 right-0 w-32 h-32 ${card.bg} rounded-full blur-[80px] opacity-10 group-hover:opacity-20 transition-opacity`}></div>
+            <div className="flex items-start justify-between relative z-10">
+              <div>
+                <p className="text-sm font-semibold text-gray-500 uppercase tracking-wider">{card.title}</p>
+                <h3 className="text-4xl font-extrabold text-gray-900 mt-2 tracking-tight">{card.value}</h3>
               </div>
-            ))}
+              <div className={`p-4 rounded-2xl text-white ${card.bg} shadow-lg ${card.shadow}`}>
+                <card.icon className="w-7 h-7" />
+              </div>
+            </div>
+            <div className="mt-6 flex items-center text-sm font-medium text-green-600 relative z-10">
+              <ArrowUpRight className="w-4 h-4 mr-1" />
+              <span>12% increase from last month</span>
+            </div>
           </div>
-        )}
+        ))}
+      </div>
+
+      {/* Activity Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
+              <Activity className="w-6 h-6" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Recent Activities</h2>
+          </div>
+          <button className="text-sm font-medium text-blue-600 hover:text-blue-700">View All</button>
+        </div>
+        
+        <div className="space-y-6 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
+          
+          <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-300 group-[.is-active]:bg-blue-600 text-white group-[.is-active]:text-white shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+              <CheckSquare className="w-4 h-4" />
+            </div>
+            <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-bold text-gray-900 text-sm">Task Completed</h3>
+                <time className="text-xs font-medium text-gray-500">10 mins ago</time>
+              </div>
+              <p className="text-sm text-gray-500">You completed "Prepare Q3 Presentation"</p>
+            </div>
+          </div>
+
+          <div className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group">
+            <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-300 text-slate-500 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
+              <Users className="w-4 h-4" />
+            </div>
+            <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-bold text-gray-900 text-sm">New Customer Added</h3>
+                <time className="text-xs font-medium text-gray-500">2 hours ago</time>
+              </div>
+              <p className="text-sm text-gray-500">Jane Doe from TechCorp was registered.</p>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
 };
 
 export default Dashboard;
-
