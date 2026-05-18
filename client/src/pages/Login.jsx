@@ -19,7 +19,14 @@ const Login = () => {
       toast.success('Welcome back!');
       navigate('/');
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Login failed');
+      console.error("Login Error Details:", error);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      
+      if (error.message === 'Network Error') {
+        toast.error(`Network Error: Cannot connect to ${apiUrl}. Check backend deployment!`, { duration: 6000 });
+      } else {
+        toast.error(error.response?.data?.message || `Error: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }

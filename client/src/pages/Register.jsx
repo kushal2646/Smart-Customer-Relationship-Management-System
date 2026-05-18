@@ -20,7 +20,14 @@ const Register = () => {
       toast.success('Account created successfully!');
       navigate('/');
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Registration failed');
+      console.error("Registration Error Details:", error);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      
+      if (error.message === 'Network Error') {
+        toast.error(`Network Error: Cannot connect to ${apiUrl}. (If you are on Vercel, you cannot connect to localhost).`, { duration: 6000 });
+      } else {
+        toast.error(error.response?.data?.message || `Error: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
